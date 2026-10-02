@@ -1,0 +1,50 @@
+# Deployment de l'API de paiements (backend).
+# Le Deployment déclare un état voulu (3 réplicas de ce gabarit de pod) ;
+# il délègue au ReplicaSet le travail de maintenir ce nombre de pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-paiements
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+spec:
+  # Nombre de pods voulu. Ce fichier fait foi : un « kubectl apply » ramène à 3.
+  replicas: 3
+  # Le selector indique quels pods appartiennent à ce Deployment.
+  # Il est immuable une fois le Deployment créé.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: paiements-api
+  # Gabarit des pods créés par le ReplicaSet
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-paiements
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: backend
+      containers:
+        - name: app
+          image: ghcr.io/gologic/bdc-formation/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Nom affiché par la route « / »
+            - name: NOM_APPLI
+              value: "api-paiements"
+            # L'appli refuse de démarrer si une de ces variables est absente
+            - name: EXIGE_VARS
+              value: "DEVISE,BD_MOT_DE_PASSE"
+          # Toutes les clés de la ConfigMap et du Secret deviennent des variables
+          envFrom:
+            - configMapRef:
+                name: api-paiements-config
+            - secretRef:
+                name: api-paiements-secret
+          # Les sondes (probes) sont l'objet de l'atelier 3,
+          # les requests/limits celui de l'atelier 4.
+    spec:
+      # Laisse 30 s à l'appli pour terminer ses transactions avant l'arrêt forcé
+      terminationGracePeriodSeconds: 30

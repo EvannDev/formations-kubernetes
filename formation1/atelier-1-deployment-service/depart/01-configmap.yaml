@@ -1,0 +1,16 @@
+# Configuration non sensible de api-paiements.
+# Une ConfigMap stocke des paires clé/valeur en clair ; le Deployment les injecte
+# comme variables d'environnement (envFrom).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-paiements-config
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+data:
+  # Devise des montants manipulés par l'API
+  DEVISE: "CAD"
+  # Verbosité des journaux : debug, info, avertissement, erreur
+  NIVEAU_JOURNAL: "info"
