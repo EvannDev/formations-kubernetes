@@ -224,7 +224,12 @@ for composant in coredns local-path-provisioner metrics-server traefik; do
   ok "${composant} prêt."
 done
 
-# --- 7. Namespaces de la formation --------------------------------------------
+# --- 7. Ingress de Hubble UI --------------------------------------------------
+
+kubectl apply -f "$(dirname "$0")/hubble-ui-ingress.yaml" >/dev/null
+ok "Hubble UI exposée par Traefik sur http://hubble.localhost"
+
+# --- 8. Namespaces de la formation --------------------------------------------
 
 for ns in "${NAMESPACES[@]}"; do
   kubectl create namespace "$ns" --dry-run=client -o yaml \
@@ -237,5 +242,5 @@ echo
 ok "Poste prêt. Ouvrez un nouveau terminal (pour KUBECONFIG), puis lancez :"
 echo "   ./verifier-poste.sh"
 echo
-echo "Interface Hubble (flux réseau en direct) : cilium hubble ui"
-echo "   puis http://localhost:12000 si le navigateur ne s'ouvre pas tout seul."
+echo "Interface Hubble (flux réseau en direct) : http://hubble.localhost"
+echo "   (ou « cilium hubble ui », puis http://localhost:12000)"

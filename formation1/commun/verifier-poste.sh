@@ -123,17 +123,53 @@ fi
 # --- 5. Traefik sur les ports 80/443 du poste ---------------------------------
 # Sans Ingress, Traefik doit répondre « 404 page not found ».
 
+# Sous WSL, les ports exposés par Cilium (eBPF, sans processus en écoute) ne sont
+# pas joignables par localhost : on passe alors par un port-forward de Traefik.
+# L'échec est seulement signalé.
+if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+  echec_ports=alerte
+  conseil_ports="Sous WSL, utilisez : kubectl port-forward -n kube-system svc/traefik 8080:80"
+else
+  echec_ports=echec
+  conseil_ports="Un autre service occupe-t-il le port ?"
+fi
+
 code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost/ || true)
 if [[ "$code" == "404" ]]; then
   ok "Traefik répond sur http://localhost (port 80)"
 else
-  echec "Traefik ne répond pas sur http://localhost (code : ${code:-aucun}). Un autre service occupe-t-il le port 80 ?"
+  $echec_ports "Traefik ne répond pas sur http://localhost (code : ${code:-aucun}). ${conseil_ports}"
 fi
 code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://localhost/ || true)
 if [[ "$code" == "404" ]]; then
   ok "Traefik répond sur https://localhost (port 443)"
 else
-  echec "Traefik ne répond pas sur https://localhost (code : ${code:-aucun})"
+  $echec_ports "Traefik ne répond pas sur https://localhost (code : ${code:-aucun}). ${conseil_ports}"
+fi
+
+# --- 5 bis. Hubble UI à travers Traefik ---------------------------------------
+# Port-forward temporaire vers Traefik : le test ne dépend pas des ports 80/443
+# du poste et fonctionne aussi sous WSL.
+
+if kubectl get ingress hubble-ui -n kube-system >/dev/null 2>&1; then
+  port_local=18080
+  kubectl port-forward -n kube-system svc/traefik "${port_local}:80" >/dev/null 2>&1 &
+  pid_pf=$!
+  code=""
+  for _ in $(seq 1 10); do
+    sleep 1
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+      -H 'Host: hubble.localhost' "http://127.0.0.1:${port_local}/" || true)
+    [[ "$code" != "000" ]] && break
+  done
+  kill "$pid_pf" 2>/dev/null; wait "$pid_pf" 2>/dev/null
+  if [[ "$code" == "200" ]]; then
+    ok "Hubble UI répond à travers Traefik (http://hubble.localhost)"
+  else
+    echec "Hubble UI ne répond pas à travers Traefik (code : ${code:-aucun}) : kubectl describe ingress hubble-ui -n kube-system"
+  fi
+else
+  echec "Ingress hubble-ui absent (kubectl apply -f hubble-ui-ingress.yaml)"
 fi
 
 # --- 6. Image de formation et DNS du cluster ----------------------------------
