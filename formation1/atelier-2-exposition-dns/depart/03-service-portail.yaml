@@ -1,0 +1,19 @@
+# Service interne du portail client.
+# Il reste en ClusterIP : c'est l'Ingress (04-ingress.yaml) qui l'expose hors du cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: portail-client
+  ports:
+    - name: http
+      port: 80
+      # Référence par nom au port « http » déclaré dans le Deployment (8080)
+      targetPort: http

@@ -1,0 +1,32 @@
+# Ingress du portail client : règle de routage HTTP de l'extérieur vers le Service.
+# Traefik (le contrôleur Ingress de k3s) lit cette règle : toute requête dont
+# l'en-tête Host vaut portail.localhost est envoyée au Service portail-client.
+#
+# *.localhost désigne toujours le poste lui-même : les navigateurs le résolvent
+# sans configuration, aucun fichier hosts à modifier.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  # Contrôleur chargé de cet Ingress
+  ingressClassName: traefik
+  rules:
+    - host: portail.localhost
+      http:
+        paths:
+          - path: /
+            # Prefix : / couvre aussi /appel, /info, etc.
+            pathType: Prefix
+            backend:
+              service:
+                name: portail-client
+                port:
+                  # CORRECTION 3 : le port du Service portail-client s'appelle « http ».
+                  # Avec « web », Traefik ne trouve pas le port et ignore la règle
+                  # (404 page not found).
+                  name: http

@@ -1,0 +1,41 @@
+# Deployment du portail client (frontend).
+# Le portail appelle l'API de paiements : la route /appel interroge URL_AMONT et
+# renvoie sa réponse, ou l'erreur exacte rencontrée (DNS, refus, délai dépassé).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portail-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portail-client
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Nom affiché par la route « / »
+            - name: NOM_APPLI
+              value: "portail-client"
+            # Adresse de l'API de paiements, appelée par la route /appel.
+            # Forme complète d'un nom de Service : <service>.<namespace>.svc.cluster.local
+            # CORRECTION 2 : le namespace « formations-kubernetes » n'existe pas (NXDOMAIN).
+            # Le portail et l'API sont dans le même namespace : le nom court suffit,
+            # le résolveur complète avec les domaines de recherche de /etc/resolv.conf.
+            # Forme explicite équivalente : http://api-paiements.bdc.svc.cluster.local
+            - name: URL_AMONT
+              value: "http://api-paiements"
