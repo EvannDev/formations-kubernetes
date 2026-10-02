@@ -41,7 +41,7 @@ kubectl get events --sort-by=.lastTimestamp   # ce qui s'est passé, dans l'ordr
 kubectl exec -it <pod> -- sh                  # shell dans un conteneur
 kubectl exec <pod> -- nslookup <service>      # tester le DNS
 kubectl exec <pod> -- wget -qO- http://<service>/   # tester un Service
-kubectl run test --rm -it --restart=Never --image=ghcr.io/gologic/bdc-formation/app:1.0 \
+kubectl run test --rm -it --restart=Never --image=ghcr.io/evanndev/formations-kubernetes/app:1.0 \
   --command -- wget -qO- http://<service>     # pod jetable de test
 ```
 

@@ -1,89 +1,90 @@
 #!/usr/bin/env bash
-# Atelier 1 — vérifie l'état final de api-paiements dans $NS.
-# Sortie ✅/❌ par critère ; code retour ≠ 0 si au moins un critère échoue.
+# Workshop 1 — checks the final state of api-paiements in $NS.
+# Prints ✅/❌ per check; exit code ≠ 0 if at least one check fails.
+# Messages are in French: participants read them.
 set -uo pipefail
 
 NS="${NS:-bdc}"
-APPLI="api-paiements"
-SELECTEUR="app.kubernetes.io/name=${APPLI}"
-VERSION_ATTENDUE="1.0"
-REPLICAS_ATTENDUS=3
-echecs=0
+APP="api-paiements"
+SELECTOR="app.kubernetes.io/name=${APP}"
+EXPECTED_VERSION="1.0"
+EXPECTED_REPLICAS=3
+failures=0
 
-ok()    { echo "✅ $*"; }
-echec() { echo "❌ $*"; echecs=$((echecs + 1)); }
+ok()   { echo "✅ $*"; }
+fail() { echo "❌ $*"; failures=$((failures + 1)); }
 
 echo "Atelier 1 — vérification dans le namespace « ${NS} »"
 echo
 
 if ! kubectl get namespace "$NS" >/dev/null 2>&1; then
-  echec "Le namespace ${NS} n'existe pas (avez-vous fait « export NS=bdc » ?)"
+  fail "Le namespace ${NS} n'existe pas (avez-vous fait « export NS=bdc » ?)"
   exit 1
 fi
 
-# 1. Deployment : 3 réplicas prêts et à jour
-if kubectl get deploy "$APPLI" -n "$NS" >/dev/null 2>&1; then
-  prets=$(kubectl get deploy "$APPLI" -n "$NS" -o jsonpath='{.status.readyReplicas}')
-  a_jour=$(kubectl get deploy "$APPLI" -n "$NS" -o jsonpath='{.status.updatedReplicas}')
-  voulus=$(kubectl get deploy "$APPLI" -n "$NS" -o jsonpath='{.spec.replicas}')
-  if [[ "${voulus:-0}" == "$REPLICAS_ATTENDUS" && "${prets:-0}" == "$REPLICAS_ATTENDUS" && "${a_jour:-0}" == "$REPLICAS_ATTENDUS" ]]; then
-    ok "Deployment ${APPLI} : ${REPLICAS_ATTENDUS}/${REPLICAS_ATTENDUS} pods Ready"
+# 1. Deployment: 3 replicas ready and up to date
+if kubectl get deploy "$APP" -n "$NS" >/dev/null 2>&1; then
+  ready=$(kubectl get deploy "$APP" -n "$NS" -o jsonpath='{.status.readyReplicas}')
+  updated=$(kubectl get deploy "$APP" -n "$NS" -o jsonpath='{.status.updatedReplicas}')
+  desired=$(kubectl get deploy "$APP" -n "$NS" -o jsonpath='{.spec.replicas}')
+  if [[ "${desired:-0}" == "$EXPECTED_REPLICAS" && "${ready:-0}" == "$EXPECTED_REPLICAS" && "${updated:-0}" == "$EXPECTED_REPLICAS" ]]; then
+    ok "Deployment ${APP} : ${EXPECTED_REPLICAS}/${EXPECTED_REPLICAS} pods Ready"
   else
-    echec "Deployment ${APPLI} : voulus=${voulus:-0}, prêts=${prets:-0}, à jour=${a_jour:-0} (attendu : ${REPLICAS_ATTENDUS} partout)"
+    fail "Deployment ${APP} : voulus=${desired:-0}, prêts=${ready:-0}, à jour=${updated:-0} (attendu : ${EXPECTED_REPLICAS} partout)"
   fi
 else
-  echec "Deployment ${APPLI} introuvable"
+  fail "Deployment ${APP} introuvable"
 fi
 
-# 2. Pods : 3 pods actifs (hors pods en cours de suppression), 0 restart
-#    Format : nom|deletionTimestamp|ready|restartCount
-lignes=$(kubectl get pods -n "$NS" -l "$SELECTEUR" \
+# 2. Pods: 3 active pods (terminating pods excluded), 0 restart
+#    Format: name|deletionTimestamp|ready|restartCount
+pods=$(kubectl get pods -n "$NS" -l "$SELECTOR" \
   -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.metadata.deletionTimestamp}{"|"}{.status.containerStatuses[0].ready}{"|"}{.status.containerStatuses[0].restartCount}{"\n"}{end}' 2>/dev/null \
   | awk -F'|' '$1 != "" && $2 == ""')
-nb_pods=$(printf '%s\n' "$lignes" | grep -c . || true)
-restarts=$(printf '%s\n' "$lignes" | awk -F'|' '{s += $4} END {print s + 0}')
-if [[ "$nb_pods" == "$REPLICAS_ATTENDUS" && "$restarts" == "0" ]]; then
-  ok "Pods ${APPLI} : ${nb_pods} pods, 0 restart depuis le dernier rollout"
+pod_count=$(printf '%s\n' "$pods" | grep -c . || true)
+restarts=$(printf '%s\n' "$pods" | awk -F'|' '{s += $4} END {print s + 0}')
+if [[ "$pod_count" == "$EXPECTED_REPLICAS" && "$restarts" == "0" ]]; then
+  ok "Pods ${APP} : ${pod_count} pods, 0 restart depuis le dernier rollout"
 else
-  echec "Pods ${APPLI} : ${nb_pods} pods actifs, ${restarts} restart(s) (attendu : ${REPLICAS_ATTENDUS} pods, 0 restart)"
+  fail "Pods ${APP} : ${pod_count} pods actifs, ${restarts} restart(s) (attendu : ${EXPECTED_REPLICAS} pods, 0 restart)"
 fi
 
-# 3. Service : 3 endpoints prêts dans les EndpointSlices
-if kubectl get svc "$APPLI" -n "$NS" >/dev/null 2>&1; then
-  endpoints_prets=$(kubectl get endpointslices -n "$NS" -l "kubernetes.io/service-name=${APPLI}" \
+# 3. Service: 3 ready endpoints in the EndpointSlices
+if kubectl get svc "$APP" -n "$NS" >/dev/null 2>&1; then
+  ready_endpoints=$(kubectl get endpointslices -n "$NS" -l "kubernetes.io/service-name=${APP}" \
     -o jsonpath='{range .items[*].endpoints[*]}{.conditions.ready}{"\n"}{end}' 2>/dev/null \
     | grep -c '^true$' || true)
-  if [[ "$endpoints_prets" == "$REPLICAS_ATTENDUS" ]]; then
-    ok "Service ${APPLI} : ${endpoints_prets} endpoints prêts"
+  if [[ "$ready_endpoints" == "$EXPECTED_REPLICAS" ]]; then
+    ok "Service ${APP} : ${ready_endpoints} endpoints prêts"
   else
-    echec "Service ${APPLI} : ${endpoints_prets} endpoint(s) prêt(s) (attendu : ${REPLICAS_ATTENDUS})"
+    fail "Service ${APP} : ${ready_endpoints} endpoint(s) prêt(s) (attendu : ${EXPECTED_REPLICAS})"
   fi
 else
-  echec "Service ${APPLI} introuvable"
+  fail "Service ${APP} introuvable"
 fi
 
-# 4. Test fonctionnel : « / » répond avec la version 1.0, en passant par le Service
-reponse=$(kubectl exec -n "$NS" "deploy/${APPLI}" -- wget -qO- -T 5 "http://${APPLI}/" 2>/dev/null || true)
-if [[ "$reponse" =~ \"version\"[[:space:]]*:[[:space:]]*\"${VERSION_ATTENDUE}\" ]]; then
-  ok "http://${APPLI}/ répond avec la version ${VERSION_ATTENDUE}"
-elif [[ -z "$reponse" ]]; then
-  echec "http://${APPLI}/ ne répond pas"
+# 4. Functional test: "/" answers with version 1.0, through the Service
+response=$(kubectl exec -n "$NS" "deploy/${APP}" -- wget -qO- -T 5 "http://${APP}/" 2>/dev/null || true)
+if [[ "$response" =~ \"version\"[[:space:]]*:[[:space:]]*\"${EXPECTED_VERSION}\" ]]; then
+  ok "http://${APP}/ répond avec la version ${EXPECTED_VERSION}"
+elif [[ -z "$response" ]]; then
+  fail "http://${APP}/ ne répond pas"
 else
-  echec "http://${APPLI}/ répond, mais pas avec la version ${VERSION_ATTENDUE} : ${reponse}"
+  fail "http://${APP}/ répond, mais pas avec la version ${EXPECTED_VERSION} : ${response}"
 fi
 
-# 5. Secret : contient la clé BD_MOT_DE_PASSE
-cle=$(kubectl get secret "${APPLI}-secret" -n "$NS" -o jsonpath='{.data.BD_MOT_DE_PASSE}' 2>/dev/null || true)
-if [[ -n "$cle" ]]; then
-  ok "Secret ${APPLI}-secret : contient BD_MOT_DE_PASSE"
+# 5. Secret: contains the BD_MOT_DE_PASSE key
+key=$(kubectl get secret "${APP}-secret" -n "$NS" -o jsonpath='{.data.BD_MOT_DE_PASSE}' 2>/dev/null || true)
+if [[ -n "$key" ]]; then
+  ok "Secret ${APP}-secret : contient BD_MOT_DE_PASSE"
 else
-  echec "Secret ${APPLI}-secret : clé BD_MOT_DE_PASSE absente (ou Secret introuvable)"
+  fail "Secret ${APP}-secret : clé BD_MOT_DE_PASSE absente (ou Secret introuvable)"
 fi
 
 echo
-if (( echecs == 0 )); then
+if (( failures == 0 )); then
   echo "🎉 Atelier 1 réussi."
 else
-  echo "${echecs} critère(s) en échec."
+  echo "${failures} critère(s) en échec."
 fi
-exit $(( echecs > 0 ? 1 : 0 ))
+exit $(( failures > 0 ? 1 : 0 ))

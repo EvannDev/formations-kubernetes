@@ -1,16 +1,16 @@
-# Ingress de l'interface Hubble UI (flux réseau observés par Cilium).
-# Appliqué par installer-poste.sh.
+# Ingress for Hubble UI (network flows observed by Cilium).
+# Applied by installer-poste.sh.
 #
-# Accès : http://hubble.localhost (ou http://hubble.localhost:<port> derrière un
-# port-forward de Traefik). Les navigateurs résolvent *.localhost vers 127.0.0.1
-# sans configuration : aucun fichier hosts à modifier.
+# Access: http://hubble.localhost (or http://hubble.localhost:<port> behind a
+# Traefik port-forward). Browsers resolve *.localhost to 127.0.0.1 without any
+# configuration: no hosts file to edit.
 #
-# Routage par hôte, pas par chemin : Hubble UI attend d'être servie à la racine (/).
+# Host-based routing, not path-based: Hubble UI expects to be served at the root (/).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: hubble-ui
-  # Même namespace que le Service hubble-ui installé par Cilium
+  # Same namespace as the hubble-ui Service installed by Cilium
   namespace: kube-system
   labels:
     app.kubernetes.io/name: hubble-ui

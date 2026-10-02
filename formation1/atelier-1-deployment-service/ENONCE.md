@@ -281,7 +281,7 @@ kubectl delete pod <pod-en-quarantaine>
 Passez à la version `1.1` :
 
 ```bash
-kubectl set image deployment/api-paiements app=ghcr.io/gologic/bdc-formation/app:1.1
+kubectl set image deployment/api-paiements app=ghcr.io/evanndev/formations-kubernetes/app:1.1
 kubectl rollout status deployment/api-paiements
 ```
 
@@ -314,7 +314,7 @@ lignes), puis `deployment.apps/api-paiements rolled back` et
 
 ```bash
 kubectl run test --rm -it --restart=Never \
-  --image=ghcr.io/gologic/bdc-formation/app:1.0 \
+  --image=ghcr.io/evanndev/formations-kubernetes/app:1.0 \
   --command -- wget -qO- http://api-paiements
 ```
 
