@@ -1,0 +1,333 @@
+# Atelier 5 — les cinq applis corrigées (chaque correction marquée « CORRECTION n »).
+# Rattrapage : kubectl apply -n bdc-diagnostic -f solution/pannes.yaml
+---
+# Virements Interac entrants et sortants
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: virements-interac
+  labels:
+    app.kubernetes.io/name: virements-interac
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: virements-interac
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: virements-interac
+        app.kubernetes.io/part-of: bdc-paiements
+    spec:
+      containers:
+        - name: app
+          # CORRECTION 1 : le tag était « 1.O » (lettre O), qui n'existe pas dans le registre : ImagePullBackOff.
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "virements-interac"
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: virements-interac
+  labels:
+    app.kubernetes.io/name: virements-interac
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  selector:
+    app.kubernetes.io/name: virements-interac
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notifications-client-config
+  labels:
+    app.kubernetes.io/name: notifications-client
+    app.kubernetes.io/part-of: bdc-paiements
+data:
+  EXPEDITEUR: "ne-pas-repondre@bdc.ca"
+  # CORRECTION 2 : URL_COURRIEL, exigée par EXIGE_VARS, manquait dans la ConfigMap : arrêt au démarrage (CrashLoopBackOff).
+  URL_COURRIEL: "smtp://relais-courriel.bdc.local:25"
+---
+# Courriels et notifications aux clients
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications-client
+  labels:
+    app.kubernetes.io/name: notifications-client
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notifications-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notifications-client
+        app.kubernetes.io/part-of: bdc-paiements
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "notifications-client"
+            - name: EXIGE_VARS
+              value: "EXPEDITEUR,URL_COURRIEL"
+          envFrom:
+            - configMapRef:
+                name: notifications-client-config
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notifications-client
+  labels:
+    app.kubernetes.io/name: notifications-client
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  selector:
+    app.kubernetes.io/name: notifications-client
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Scoring de crédit en temps réel
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moteur-scoring
+  labels:
+    app.kubernetes.io/name: moteur-scoring
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: moteur-scoring
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: moteur-scoring
+        app.kubernetes.io/part-of: bdc-paiements
+    spec:
+      # CORRECTION 3 : le nodeSelector « bdc.ca/pool: calcul » ne correspondait à aucun nœud : Pending. Retiré.
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "moteur-scoring"
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: moteur-scoring
+  labels:
+    app.kubernetes.io/name: moteur-scoring
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  selector:
+    app.kubernetes.io/name: moteur-scoring
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Relevés transmis aux partenaires
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: releves-partenaires
+  labels:
+    app.kubernetes.io/name: releves-partenaires
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: releves-partenaires
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: releves-partenaires
+        app.kubernetes.io/part-of: bdc-paiements
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "releves-partenaires"
+            # CORRECTION 4 : READINESS_ECHOUE_APRES=30 faisait échouer la readiness 30 s après le démarrage : pod 0/1, Service sans endpoint prêt. Retirée.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: releves-partenaires
+  labels:
+    app.kubernetes.io/name: releves-partenaires
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  selector:
+    app.kubernetes.io/name: releves-partenaires
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+# Consultation du portefeuille de titres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portefeuille-titres
+  labels:
+    app.kubernetes.io/name: portefeuille-titres
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portefeuille-titres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portefeuille-titres
+        app.kubernetes.io/part-of: bdc-paiements
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "portefeuille-titres"
+            # CORRECTION 5 (bonus) : LIVENESS_ECHOUE_APRES=90 faisait échouer la liveness 90 s après le démarrage : redémarrage toutes les ~2 min. Retirée.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portefeuille-titres
+  labels:
+    app.kubernetes.io/name: portefeuille-titres
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  selector:
+    app.kubernetes.io/name: portefeuille-titres
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
