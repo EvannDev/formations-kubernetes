@@ -1,0 +1,67 @@
+# Deployment de api-paiements, version avec sondes (probes).
+# Il REMPLACE celui des ateliers précédents.
+#
+# Nouvelle réalité de l'appli : elle met 45 s à démarrer (connexion à la base,
+# chargement du cache…). Pendant ce temps, /healthz et /readyz répondent 503.
+#
+# Les sondes sont exécutées par le kubelet, sur chaque conteneur :
+#   liveness   « le conteneur est-il bloqué ? »          échec → redémarrage
+#   readiness  « peut-il recevoir du trafic ? »          échec → retiré du Service
+#   startup    « a-t-il fini de démarrer ? »             suspend les deux autres tant qu'elle n'a pas réussi
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-paiements
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-paiements
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-paiements
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: backend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "api-paiements"
+            - name: EXIGE_VARS
+              value: "DEVISE,BD_MOT_DE_PASSE"
+            # Démarrage lent : sondes en 503 pendant 45 s
+            - name: DELAI_DEMARRAGE
+              value: "45"
+          envFrom:
+            - configMapRef:
+                name: api-paiements-config
+            - secretRef:
+                name: api-paiements-secret
+          # Liveness : le kubelet interroge la route toutes les periodSeconds ;
+          # après failureThreshold échecs consécutifs, il redémarre le conteneur.
+          livenessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            # Attente avant le premier test
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          # Readiness : tant qu'elle échoue, le pod est retiré des endpoints du Service.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
