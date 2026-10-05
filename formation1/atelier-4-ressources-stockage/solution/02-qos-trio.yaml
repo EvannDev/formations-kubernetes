@@ -1,0 +1,70 @@
+# Trois pods pour observer les classes de QoS (qualité de service).
+# Ils sont corrects : rien à corriger ici, seulement à observer.
+#
+# Kubernetes déduit la classe de QoS des requests et limits :
+#   BestEffort  ni requests ni limits          → premier évincé si le nœud manque de mémoire
+#   Burstable   requests, limits absentes ou plus hautes
+#   Guaranteed  requests = limits, CPU et mémoire, pour chaque conteneur → dernier évincé
+#
+# Pods « nus » (sans Deployment) : acceptable pour une observation, jamais en
+# production — personne ne les recrée s'ils disparaissent.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-besteffort
+  labels:
+    app.kubernetes.io/name: qos-besteffort
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+      env:
+        - name: NOM_APPLI
+          value: "qos-besteffort"
+      # Aucune section resources
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-burstable
+  labels:
+    app.kubernetes.io/name: qos-burstable
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+      env:
+        - name: NOM_APPLI
+          value: "qos-burstable"
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          # Limite mémoire plus haute que la request
+          memory: 64Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qos-guaranteed
+  labels:
+    app.kubernetes.io/name: qos-guaranteed
+    app.kubernetes.io/part-of: bdc-paiements
+spec:
+  containers:
+    - name: app
+      image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+      env:
+        - name: NOM_APPLI
+          value: "qos-guaranteed"
+      resources:
+        # requests = limits, pour le CPU ET la mémoire
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 64Mi

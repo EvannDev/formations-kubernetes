@@ -1,0 +1,24 @@
+# Demande de stockage (PersistentVolumeClaim) du cache de sessions.
+# Le PVC décrit le besoin ; la StorageClass désignée crée le volume réel
+# (PersistentVolume) qui y répond.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cache-sessions
+  labels:
+    app.kubernetes.io/name: cache-sessions
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: cache
+spec:
+  # Type de stockage à utiliser (kubectl get storageclass)
+  # CORRECTION 3 : « ssd-chiffre » n'existe pas sur le cluster : PVC Pending.
+  # local-path est la StorageClass fournie par k3s (répertoire sur le nœud).
+  # Ce champ est immuable : corriger un PVC existant impose de le supprimer
+  # puis de le recréer.
+  storageClassName: local-path
+  accessModes:
+    # Monté en lecture-écriture par un seul nœud à la fois
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

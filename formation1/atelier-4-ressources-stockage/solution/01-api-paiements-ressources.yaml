@@ -1,0 +1,85 @@
+# Deployment de api-paiements, version avec ressources (requests et limits).
+# Il REMPLACE celui de l'atelier 3 (les sondes sont conservées).
+#
+# Nouvelle réalité de l'appli : elle garde 150 Mo de cache en mémoire dès son
+# démarrage (BALLON_MEMOIRE_MO=150).
+#
+#   requests  ce que le scheduler RÉSERVE sur le nœud pour placer le pod
+#   limits    le plafond : au-delà, le CPU est ralenti, la mémoire provoque l'arrêt du conteneur
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-paiements
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-paiements
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-paiements
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: backend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "api-paiements"
+            - name: EXIGE_VARS
+              value: "DEVISE,BD_MOT_DE_PASSE"
+            - name: DELAI_DEMARRAGE
+              value: "45"
+            # Cache en mémoire : 150 Mo alloués et conservés au démarrage
+            - name: BALLON_MEMOIRE_MO
+              value: "150"
+          envFrom:
+            - configMapRef:
+                name: api-paiements-config
+            - secretRef:
+                name: api-paiements-secret
+          resources:
+            requests:
+              # CPU en cœurs : "1" = un cœur, "250m" = un quart de cœur
+              # CORRECTION 1 : 64 cœurs réservés, aucun nœud ne les a : pod Pending
+              # (Insufficient cpu). L'appli consomme quelques millicœurs au repos ;
+              # 100m (un dixième de cœur) suffit.
+              cpu: 100m
+              # Mémoire en octets : Mi = mébioctet (1 Mi = 1 048 576 octets)
+              # CORRECTION 2 (suite) : réservation proche de la consommation réelle
+              # (150 Mo de cache + ~15 Mo pour le processus).
+              memory: 192Mi
+            limits:
+              # Pas de limite CPU : au-delà de sa request, l'appli profite du CPU
+              # libre du nœud au lieu d'être ralentie.
+              # CORRECTION 2 : 128 Mi < 150 Mo de cache : le noyau tue le conteneur
+              # dès le démarrage (OOMKilled). Plafond avec de la marge.
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2

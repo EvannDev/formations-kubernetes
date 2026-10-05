@@ -1,0 +1,175 @@
+# Socle de l'atelier 4 : état final de l'atelier 3, pour rattraper un retard.
+#   kubectl apply -f depart/00-socle.yaml
+# Inutile si l'atelier 3 est terminé (./verifier.sh de l'atelier 3 tout vert).
+#
+# ⚠️ PRATIQUE À ÉVITER EN PRODUCTION : le Secret ci-dessous contient un mot de
+# passe en clair dans un fichier versionné. Il n'est là que pour le rattrapage.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-paiements-config
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+data:
+  DEVISE: "CAD"
+  NIVEAU_JOURNAL: "info"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-paiements-secret
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+type: Opaque
+stringData:
+  BD_MOT_DE_PASSE: "formation-bdc"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-paiements
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api-paiements
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api-paiements
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: backend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "api-paiements"
+            - name: EXIGE_VARS
+              value: "DEVISE,BD_MOT_DE_PASSE"
+            - name: DELAI_DEMARRAGE
+              value: "45"
+          envFrom:
+            - configMapRef:
+                name: api-paiements-config
+            - secretRef:
+                name: api-paiements-secret
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 15
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            failureThreshold: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-paiements
+  labels:
+    app.kubernetes.io/name: api-paiements
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: api-paiements
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portail-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portail-client
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: NOM_APPLI
+              value: "portail-client"
+            - name: URL_AMONT
+              value: "http://api-paiements"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: portail-client
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portail-client
+  labels:
+    app.kubernetes.io/name: portail-client
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: frontend
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: portail.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portail-client
+                port:
+                  name: http

@@ -1,0 +1,46 @@
+# Cache de sessions : un seul pod, dont les données doivent survivre au pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-sessions
+  labels:
+    app.kubernetes.io/name: cache-sessions
+    app.kubernetes.io/part-of: bdc-paiements
+    app.kubernetes.io/component: cache
+spec:
+  replicas: 1
+  # Recreate : l'ancien pod est arrêté AVANT que le nouveau démarre.
+  # Jamais deux pods en même temps sur le même volume (voir le bonus).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cache-sessions
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cache-sessions
+        app.kubernetes.io/part-of: bdc-paiements
+        app.kubernetes.io/component: cache
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/evanndev/formations-kubernetes/app:1.0
+          env:
+            - name: NOM_APPLI
+              value: "cache-sessions"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          # Où le volume apparaît dans le conteneur
+          volumeMounts:
+            - name: donnees
+              mountPath: /donnees
+      # Volumes du pod : ici, le PVC cache-sessions
+      volumes:
+        - name: donnees
+          persistentVolumeClaim:
+            claimName: cache-sessions
