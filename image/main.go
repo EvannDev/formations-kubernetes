@@ -91,17 +91,21 @@ func readNamespace() string {
 	return strings.TrimSpace(string(content))
 }
 
-// logRequests writes one line per request, except probes (one every few
-// seconds: they would drown the logs).
-func logRequests(next http.Handler) http.Handler {
+// logRequests writes one line per request, except probes and metrics scrapes.
+func logRequests(a *app) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
+		a.ServeHTTP(rec, r)
+		if r.URL.Path != "/metrics" {
+			a.httpRequests.Add(1)
+			if rec.status >= http.StatusBadRequest {
+				a.httpErrors.Add(1)
+			}
+		}
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/metrics" {
+			return
+		}
 		log.Printf("%s %s %d %s", r.Method, r.URL.RequestURI(), rec.status, time.Since(start).Round(time.Millisecond))
 	})
 }

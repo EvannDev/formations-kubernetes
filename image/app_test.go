@@ -151,6 +151,37 @@ func TestProbes(t *testing.T) {
 	}
 }
 
+func TestMetrics(t *testing.T) {
+	a := testApp(config{}, 5*time.Second)
+	handler := logRequests(a)
+	for _, path := range []string{"/", "/healthz", "/missing"} {
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("/metrics: status %d", w.Code)
+	}
+	if got := w.Header().Get("Content-Type"); got != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Errorf("Content-Type = %q", got)
+	}
+	for _, want := range []string{
+		"# TYPE formations_kubernetes_uptime_seconds gauge",
+		"formations_kubernetes_uptime_seconds 5",
+		"# TYPE formations_kubernetes_memory_retained_bytes gauge",
+		"formations_kubernetes_memory_retained_bytes 0",
+		"# TYPE formations_kubernetes_http_requests_total counter",
+		"formations_kubernetes_http_requests_total 3",
+		"# TYPE formations_kubernetes_http_errors_total counter",
+		"formations_kubernetes_http_errors_total 1",
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("/metrics is missing %q:\n%s", want, w.Body.String())
+		}
+	}
+}
+
 func TestInfoMasksSecrets(t *testing.T) {
 	a := testApp(config{}, 0)
 	a.environ = func() []string {

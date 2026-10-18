@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -26,6 +27,9 @@ type app struct {
 	pod       string
 	namespace string
 	client    *http.Client
+
+	httpRequests atomic.Uint64
+	httpErrors   atomic.Uint64
 
 	mu       sync.Mutex
 	retained [][]byte // memory from BALLON_MEMOIRE_MO and /memoire, never released
@@ -53,6 +57,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.probe(w, a.cfg.readinessFailAfter, "READINESS_ECHOUE_APRES")
 	case "/info":
 		a.info(w)
+	case "/metrics":
+		a.metrics(w)
 	case "/brule":
 		a.burnCPU(w, r)
 	case "/memoire":
@@ -62,6 +68,24 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		a.notFound(w, r)
 	}
+}
+
+// --- /metrics ----------------------------------------------------------------
+
+func (a *app) metrics(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	fmt.Fprintf(w, "# HELP formations_kubernetes_uptime_seconds Seconds since the application started.\n")
+	fmt.Fprintf(w, "# TYPE formations_kubernetes_uptime_seconds gauge\n")
+	fmt.Fprintf(w, "formations_kubernetes_uptime_seconds %.0f\n", a.now().Sub(a.start).Seconds())
+	fmt.Fprintf(w, "# HELP formations_kubernetes_memory_retained_bytes Memory retained by the application.\n")
+	fmt.Fprintf(w, "# TYPE formations_kubernetes_memory_retained_bytes gauge\n")
+	fmt.Fprintf(w, "formations_kubernetes_memory_retained_bytes %d\n", int64(a.retainedMB())<<20)
+	fmt.Fprintf(w, "# HELP formations_kubernetes_http_requests_total HTTP requests served, excluding metrics scrapes.\n")
+	fmt.Fprintf(w, "# TYPE formations_kubernetes_http_requests_total counter\n")
+	fmt.Fprintf(w, "formations_kubernetes_http_requests_total %d\n", a.httpRequests.Load())
+	fmt.Fprintf(w, "# HELP formations_kubernetes_http_errors_total HTTP responses with a 4xx or 5xx status, excluding metrics scrapes.\n")
+	fmt.Fprintf(w, "# TYPE formations_kubernetes_http_errors_total counter\n")
+	fmt.Fprintf(w, "formations_kubernetes_http_errors_total %d\n", a.httpErrors.Load())
 }
 
 // --- / -----------------------------------------------------------------------

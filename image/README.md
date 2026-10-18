@@ -26,6 +26,7 @@ Les deux variantes tournent en utilisateur non root (UID 65532), pour amd64 et a
 | `/healthz` | liveness : 200, ou 503 (démarrage lent, `LIVENESS_ECHOUE_APRES`) |
 | `/readyz` | readiness : 200, ou 503 (démarrage lent, `READINESS_ECHOUE_APRES`) |
 | `/info` | identité, variables d'environnement (secrets masqués), limites cgroup, mémoire retenue |
+| `/metrics` | métriques Prometheus : uptime, mémoire retenue, requêtes HTTP et erreurs (port 8080) |
 | `/brule?secondes=N&fils=M` | consomme M cœurs pendant N s (défauts : 10 s, 1 fil ; max 300 s, 64 fils) |
 | `/memoire?mo=N` | alloue N Mo et les conserve (1 à 4096) |
 | `/appel` | appelle `URL_AMONT` ; renvoie sa réponse, ou HTTP 502 avec le type d'erreur (`dns`, `refus`, `timeout`, `autre`) et le message exact |
@@ -90,6 +91,7 @@ Le label `org.opencontainers.image.source` relie le paquet au dépôt
 ```bash
 docker run --rm -p 8080:8080 -e NOM_APPLI=api-paiements ghcr.io/evanndev/formations-kubernetes/app:1.0
 curl localhost:8080/
+curl localhost:8080/metrics
 curl localhost:8080/ready          # 404 : route inconnue
 
 docker run --rm -e EXIGE_VARS=BD_MOT_DE_PASSE ghcr.io/evanndev/formations-kubernetes/app:1.0
